@@ -1,44 +1,10 @@
 #[cfg(test)];
 
-
 use extra::complex::Cmplx;
+
 use super::{Fftw};
 
-macro_rules! hra {
-  ($($item:expr),+) => (
-    ~[$($item as f64),+]
-  )
-}
-
-macro_rules! ra {
-  ($($item:expr),+) => (
-    [$($item as f64),+]
-  )
-}
-
-macro_rules! ca {
-  ($($re:tt $sign:tt $im:tt),+) => (
-    [$(_c!{$re, $sign $im}),+]
-  )
-}
-
-macro_rules! _c {
-  ($re:expr , + $im:expr) => {
-    Cmplx::new($re as f64, $im as f64)
-  };
-  ($re:expr , - $im:expr) => {
-    Cmplx::new($re as f64, -$im as f64)
-  }
-}
-
-macro_rules! c {
-  ($re:expr , $im:expr) => {
-    Cmplx::new($re as f64, $im as f64)
-  };
-  ($re:expr) => {
-    Cmplx::new($re as f64, 0f64)
-  }
-}
+mod fftw3_macros;
 
 #[test]
 fn test_1d_cmplx() {
@@ -125,4 +91,15 @@ fn test_real_iter_even() {
   for (i,j) in it.skip(fftw.result().len()).zip(fftw.result().rev_iter().skip(1)) {
     assert!(i == j.conj());
   }
+}
+
+#[test]
+fn test_index() {
+  let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1};
+  let fftw = Fftw::from_slice_real(inp);
+  for i in range(0, 8) {
+    assert!(inp[i] == fftw[i as uint].unwrap());
+  }
+
+  fftw[8].is_none() || fail!();
 }

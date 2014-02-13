@@ -1,6 +1,7 @@
 #[feature(macro_rules)];
 #[crate_id = "fftw3_rust"];
 #[crate_type = "lib"];
+#[crate_type = "dylib"];
 
 #[cfg(target_arch = "x86_64")]
 extern mod extra;
@@ -24,8 +25,18 @@ pub use iteration::HermitianItems;
 
 mod fftw3_bindgen;
 mod fftw3_test;
+pub mod fftw3_macros;
 
 static mut LOCK: StaticMutex = MUTEX_INIT;
+
+/** Pretty-print an array of complex :
+
+  ```
+  let cmplx_array = ca!{48 -2, 39 + 5, 37+3, 55+0, 22+210};
+  println!("{}", Line(cmplx_array));
+  println!("{}", Col(cmplx_array));
+  ```
+**/
 
 pub enum CxDisplay<'a> {
   Line(&'a[Cmplx<f64>]),
@@ -56,6 +67,31 @@ priv struct CplxSlice<T> {
   len: uint,
 }
 
+/** Holds the state of a fourier transform :
+
+    Compute the 1d transform for real values :
+
+    ```rust
+    use fftw3_rust::{Fftw, Line};
+
+    let input = [1f64, 0f64, 2f64, 4f64, 5f64, 2f64, 0f64, -1f64, -3f64];
+    let mut fftw = Fftw::from_slice_real(input);
+    fftw.fft();
+    println!("{}", Line(fftw.result()));
+    ```
+
+    Compute the 1d transform for complex values :
+
+    ```rust
+    use extra::complex::Cmplx;
+    use fftw3_rust::{Fftw, Line};
+
+    let input = [Cmplx::new(1f64, -1f64), Cmplx::new(0f64, 2f64), Cmplx::new(4f64, 12f64)];
+    let mut fftw = Fftw::from_slice(input);
+    fftw.fft();
+    println!("{}", Line(fftw.result()));
+    ```
+**/
 pub struct Fftw<T> {
   priv inp: *mut T,
   priv outp: *mut Cmplx<f64>,
@@ -67,6 +103,8 @@ pub struct Fftw<T> {
 }
 
 impl Fftw<f64> {
+  /// Prepare a new real transform for 'capacity' elements.
+  /// The transform can only be computed once all the elements have been added.
   pub fn new_real(capacity: uint) -> Fftw<f64> {
     unsafe {
       let _g = LOCK.lock();
@@ -84,6 +122,8 @@ impl Fftw<f64> {
     }
   }
 
+  /// Prepare a new transform from the given slice of real numbers.
+  /// The elements of the slice are copied in an internal buffer allocated by fftw3.
   pub fn from_slice_real(slice: &[f64]) -> Fftw<f64> {
     let mut new = Fftw::new_real(slice.len());
     new.push_slice(slice);
@@ -92,6 +132,8 @@ impl Fftw<f64> {
 }
 
 impl Fftw<Cmplx<f64>> {
+  /// Prepare a new complex transform for 'capacity' elements.
+  /// The transform can only be computed once all the elements have been added.
   pub fn new(capacity: uint) -> Fftw<Cmplx<f64>> {
     unsafe {
       let _g = LOCK.lock();
@@ -110,6 +152,8 @@ impl Fftw<Cmplx<f64>> {
     }
   }
 
+  /// Prepare a new transform from the given slice of complex numbers.
+  /// The elements of the slice are copied in an internal buffer allocated by fftw3.
   pub fn from_slice(slice: &[Cmplx<f64>]) -> Fftw<Cmplx<f64>> {
     let mut new = Fftw::new(slice.len());
     new.push_slice(slice);
@@ -118,6 +162,8 @@ impl Fftw<Cmplx<f64>> {
 }
 
 impl<T: Pod> Fftw<T> {
+  /// Returns an immutable view of the result of a previous computation.
+  /// If no transform has been computed yet, returns an empty slice.
   pub fn result<'a>(&'a self) -> &'a [Cmplx<f64>] {
     unsafe{
       transmute(CplxSlice {
@@ -127,6 +173,8 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
+  /// Returns an mutable view of the result of a previous computation.
+  /// If no transform has been computed yet, returns an empty slice.
   pub fn mut_result<'a>(&'a mut self) -> &'a mut [Cmplx<f64>] {
     unsafe{
       transmute(CplxSlice {
@@ -136,6 +184,7 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
+  /// Returns a mutable view of the input values added to the transform so far.
   pub fn as_mut_slice<'a>(&'a mut self) -> &'a mut[T] {
     unsafe{
       transmute(CplxSlice {
@@ -145,10 +194,12 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
+  /// Returns the number of values that the transform expects.
   pub fn capacity(&self) -> uint {
     self.capacity
   }
 
+  /// Removes the last value added to the transform.
   pub fn pop(&mut self) -> Option<T> {
     if self.size == 0 {
       None
@@ -160,6 +211,9 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
+  /// Adds the elements of the given slice to the input of the transform.
+  /// The capacity of the transform is fixed, if there are two many values
+  /// in the slice no element will be added.
   pub fn push_slice(&mut self, rhs: &[T]) -> bool {
     if self.size + rhs.len() > self.capacity {
       false
@@ -173,6 +227,7 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
+  /// Adds a value to the transform, if it is not already filled up.
   pub fn push(&mut self, rhs: T) -> bool {
     if self.size == self.capacity {
       false
@@ -185,6 +240,10 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
+  /// Perform the actual Fourier transform computation.
+  /// If the transform is not filled up yet this does nothing and return None.
+  /// Otherwise, this returns an immutable view of the result. (The same you would
+  /// get by calling the result() method)
   pub fn fft<'a>(&'a mut self) -> Option<&'a[Cmplx<f64>]> {
     if self.capacity == self.size && self.size > 0 {
       unsafe{
@@ -199,6 +258,7 @@ impl<T: Pod> Fftw<T> {
 }
 
 impl<T: Pod> Container for Fftw<T> {
+  /// Returns the number of values added to the transform so far.
   fn len(&self) -> uint {
     self.size
   }
@@ -217,6 +277,7 @@ impl<T: Pod> Drop for Fftw<T> {
 }
 
 impl<T: Pod> Index<uint, Option<T>> for Fftw<T> {
+  /// Returns the element in the input data, at the given index.
   fn index(&self, index: &uint) -> Option<T> {
     if *index < self.size {
       Some(unsafe {
@@ -229,6 +290,7 @@ impl<T: Pod> Index<uint, Option<T>> for Fftw<T> {
 }
 
 impl<T> Vector<T> for Fftw<T> {
+  /// Returns an immutable view of the values added to the transform so far.
   fn as_slice<'a>(&'a self) -> &'a [T] {
     unsafe{
       transmute(CplxSlice {
@@ -241,6 +303,7 @@ impl<T> Vector<T> for Fftw<T> {
 
 pub mod iteration {
   use extra::complex::Cmplx;
+  /// Iterator over *all* the values of a result of a transform over real data.
   pub struct HermitianItems<'a> {
     priv ptr: *Cmplx<f64>,
     priv start: *Cmplx<f64>,
@@ -287,6 +350,8 @@ pub mod iteration {
   }
 
   impl super::Fftw<f64> {
+    /// Creates an iterator over *all* the values of the result of the last real transform.
+    /// If no transform has been computed yet the iterator won't yield any value.
     pub fn iter<'a>(&'a self) -> HermitianItems<'a> {
       unsafe {
         HermitianItems {
