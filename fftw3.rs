@@ -10,7 +10,7 @@ use extra::complex::Cmplx;
 
 use fftw3_bindgen::{FFTW_FORWARD, FFTW_ESTIMATE, fftw_alloc_complex, fftw_free,
                     fftw_plan_dft_1d, fftw_plan_dft_r2c_1d, fftw_destroy_plan,
-                    fftw_complex, fftw_alloc_real, fftw_execute, fftw_plan};
+                    fftw_alloc_real, fftw_execute, fftw_plan};
 
 use std::cast::transmute;
 use std::fmt::{Show, Formatter};
@@ -27,7 +27,7 @@ mod fftw3_test;
 
 static mut LOCK: StaticMutex = MUTEX_INIT;
 
-enum CxDisplay<'a> {
+pub enum CxDisplay<'a> {
   Line(&'a[Cmplx<f64>]),
   Col(&'a[Cmplx<f64>]),
 }
@@ -51,14 +51,14 @@ impl<'a> Show for CxDisplay<'a> {
   }
 }
 
-struct CplxSlice<T> {
+priv struct CplxSlice<T> {
   data: *T,
   len: uint,
 }
 
 pub struct Fftw<T> {
   priv inp: *mut T,
-  priv outp: *mut fftw_complex,
+  priv outp: *mut Cmplx<f64>,
   priv size: uint,
   priv out_size: uint,
   priv plan: fftw_plan,
@@ -91,8 +91,8 @@ impl Fftw<f64> {
   }
 }
 
-impl Fftw<fftw_complex> {
-  pub fn new(capacity: uint) -> Fftw<fftw_complex> {
+impl Fftw<Cmplx<f64>> {
+  pub fn new(capacity: uint) -> Fftw<Cmplx<f64>> {
     unsafe {
       let _g = LOCK.lock();
       let inp = fftw_alloc_complex(capacity as size_t);
@@ -110,7 +110,7 @@ impl Fftw<fftw_complex> {
     }
   }
 
-  pub fn from_slice(slice: &[fftw_complex]) -> Fftw<fftw_complex> {
+  pub fn from_slice(slice: &[Cmplx<f64>]) -> Fftw<Cmplx<f64>> {
     let mut new = Fftw::new(slice.len());
     new.push_slice(slice);
     new
@@ -118,7 +118,7 @@ impl Fftw<fftw_complex> {
 }
 
 impl<T: Pod> Fftw<T> {
-  pub fn result<'a>(&'a self) -> &'a [fftw_complex] {
+  pub fn result<'a>(&'a self) -> &'a [Cmplx<f64>] {
     unsafe{
       transmute(CplxSlice {
         data: &*self.outp,
@@ -127,7 +127,7 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
-  pub fn mut_result<'a>(&'a mut self) -> &'a mut [fftw_complex] {
+  pub fn mut_result<'a>(&'a mut self) -> &'a mut [Cmplx<f64>] {
     unsafe{
       transmute(CplxSlice {
         data: &*self.outp,
@@ -185,7 +185,7 @@ impl<T: Pod> Fftw<T> {
     }
   }
 
-  pub fn fft<'a>(&'a mut self) -> Option<&'a[fftw_complex]> {
+  pub fn fft<'a>(&'a mut self) -> Option<&'a[Cmplx<f64>]> {
     if self.capacity == self.size && self.size > 0 {
       unsafe{
         fftw_execute(self.plan);
@@ -240,17 +240,17 @@ impl<T> Vector<T> for Fftw<T> {
 }
 
 pub mod iteration {
-  use fftw3_bindgen::{fftw_complex};
+  use extra::complex::Cmplx;
   pub struct HermitianItems<'a> {
-    priv ptr: *fftw_complex,
-    priv start: *fftw_complex,
-    priv end: *fftw_complex,
+    priv ptr: *Cmplx<f64>,
+    priv start: *Cmplx<f64>,
+    priv end: *Cmplx<f64>,
     priv dir: i8, // holds the information about the direction we are iterating in
                   // and whether there should be an even or odd number of elements.
   }
 
-  impl<'a> Iterator<fftw_complex> for HermitianItems<'a> {
-    fn next(&mut self) -> Option<fftw_complex> {
+  impl<'a> Iterator<Cmplx<f64>> for HermitianItems<'a> {
+    fn next(&mut self) -> Option<Cmplx<f64>> {
       if self.dir > 0 {
         if self.ptr >= self.end {
           let tmp = self.end;
