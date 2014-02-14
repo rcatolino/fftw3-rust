@@ -75,9 +75,9 @@ priv struct CplxSlice<T> {
     use fftw3_rust::{Fftw, Line};
 
     let input = [1f64, 0f64, 2f64, 4f64, 5f64, 2f64, 0f64, -1f64, -3f64];
-    let mut fftw = Fftw::from_slice_real(input);
+    let mut fftw = Fftw::from_slice(input);
     fftw.fft();
-    println!("{}", Line(fftw.result()));
+    println!("{}", Line(fftw.output()));
     ```
 
     Compute the 1d transform for complex values :
@@ -89,7 +89,7 @@ priv struct CplxSlice<T> {
     let input = [Cmplx::new(1f64, -1f64), Cmplx::new(0f64, 2f64), Cmplx::new(4f64, 12f64)];
     let mut fftw = Fftw::from_slice(input);
     fftw.fft();
-    println!("{}", Line(fftw.result()));
+    println!("{}", Line(fftw.output()));
     ```
 **/
 pub struct Fftw<T> {
@@ -180,7 +180,7 @@ impl<T: TransformInput> TransformBuf for FftBuf<T> {
 }
 
 impl<T: TransformInput> FftBuf<T> {
-  /// Returns a mutable view of the input values added to the transform so far.
+  /// Returns a mutable view of this buffer.
   pub fn as_mut_slice<'a>(&'a mut self) -> &'a mut[T] {
     unsafe{
       transmute(CplxSlice {
@@ -190,12 +190,13 @@ impl<T: TransformInput> FftBuf<T> {
     }
   }
 
-  /// Returns the number of values that the transform expects.
+  /// Returns the capacity of this buffer. The capacity is fixed, fft buffer cannot
+  /// be resized.
   pub fn capacity(&self) -> uint {
     self.capacity
   }
 
-  /// Removes the last value added to the transform.
+  /// Removes the last value added to the buffer.
   pub fn pop(&mut self) -> Option<T> {
     if self.size == 0 {
       None
@@ -207,7 +208,7 @@ impl<T: TransformInput> FftBuf<T> {
     }
   }
 
-  /// Adds the elements of the given slice to the input of the transform.
+  /// Adds the elements of the given slice to the fft buffer.
   /// The capacity of the transform is fixed, if there are two many values
   /// in the slice no element will be added.
   pub fn push_slice(&mut self, rhs: &[T]) -> bool {
@@ -223,7 +224,7 @@ impl<T: TransformInput> FftBuf<T> {
     }
   }
 
-  /// Adds a value to the transform, if it is not already filled up.
+  /// Adds a value to the buffer, if it is not already filled up.
   pub fn push(&mut self, rhs: T) -> bool {
     if self.size == self.capacity {
       false
@@ -243,7 +244,7 @@ impl<T: TransformInput> FftBuf<T> {
 }
 
 impl<T: TransformInput> Container for FftBuf<T> {
-  /// Returns the number of values added to the transform so far.
+  /// Returns the number of values added to the buffer so far.
   fn len(&self) -> uint {
     self.size
   }
@@ -261,9 +262,12 @@ impl<T: TransformInput> Drop for FftBuf<T> {
 
 impl<T: TransformInput> Fftw<T> {
   /// Prepare a new transform for 'capacity' elements.
-  /// The transform can only be computed once all the elements have been added.
+  /// The transform can only be computed once the input buffer is full.
   pub fn new(capacity: uint) -> Fftw<T> {
     let _time: FftBuf<T> = TransformBuf::new(capacity);
+    // When the input data is real the output buffer should have a n/2 + 1 capacity,
+    // n otherwise. get_transformed_capacity returns the relevant value based on the
+    // type of T.
     let _freq = TransformBuf::new(_time.get_transformed_capacity());
     let _p = _time.make_plan(&_freq);
     Fftw {
@@ -284,7 +288,7 @@ impl<T: TransformInput> Fftw<T> {
   /// Perform the actual Fourier transform computation.
   /// If the transform is not filled up yet this does nothing and return None.
   /// Otherwise, this returns an immutable view of the result. (The same you would
-  /// get by calling the result() method)
+  /// get by calling the output() method)
   pub fn fft<'a>(&'a mut self) -> Option<&'a[Cmplx<f64>]> {
     if self.time_dom.capacity == self.time_dom.size && self.time_dom.size > 0 {
       unsafe{
@@ -297,18 +301,23 @@ impl<T: TransformInput> Fftw<T> {
     }
   }
 
-  pub fn input<'a>(&'a self) -> &'a FftBuf<T> {
-    &self.time_dom
+  /// Returns an immutable view of the input data.
+  pub fn input<'a>(&'a self) -> &'a [T] {
+    self.time_dom.as_slice()
   }
 
+  /// Returns a mutable ref to the input buffer. You can use this to
+  /// add/remove elements from the input.
   pub fn mut_input<'a>(&'a mut self) -> &'a mut FftBuf<T> {
     &mut self.time_dom
   }
 
+  /// Returns an immutable view of the output data.
   pub fn output<'a>(&'a self) -> &'a [Cmplx<f64>] {
     self.freq_dom.as_slice()
   }
 
+  /// Returns a mutable view of the output data.
   pub fn mut_output<'a>(&'a mut self) -> &'a mut [Cmplx<f64>] {
     self.freq_dom.as_mut_slice()
   }
@@ -338,7 +347,7 @@ impl<T: TransformInput> Index<uint, Option<T>> for FftBuf<T> {
 }
 
 impl<T: TransformInput> Vector<T> for FftBuf<T> {
-  /// Returns an immutable view of the values added to the transform so far.
+  /// Returns an immutable view of the values in this buffer.
   fn as_slice<'a>(&'a self) -> &'a [T] {
     unsafe{
       transmute(CplxSlice {
