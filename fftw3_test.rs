@@ -14,81 +14,84 @@ fn test_1d_cmplx() {
 }
 
 #[test]
-fn test_1d_real_from_slice() {
+fn test_1d_from_slice() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1, -3};
-  let mut fftw = Fftw::from_slice_real(inp);
+  let mut fftw = Fftw::from_slice(inp);
   fftw.fft().unwrap();
 }
 
 #[test]
-fn test_1d_real() {
-  let mut fftw = Fftw::new_real(7);
+fn test_1d() {
+  let mut fftw = Fftw::new(7);
   for i in range(-2f64, 5f64) {
-    fftw.push(i);
+    fftw.mut_input().push(i);
   }
   fftw.fft().unwrap();
 }
 
 #[test]
-fn test_1d_real_overflow() {
-  let mut fftw = Fftw::new_real(7);
+fn test_1d_overflow() {
+  let mut fftw = Fftw::new(7);
   for i in range(-2f64, 5f64) {
-    fftw.push(i);
+    fftw.mut_input().push(i);
   }
-  fftw.push(42f64) && fail!();
+  fftw.mut_input().push(42f64) && fail!();
   fftw.fft().unwrap();
 }
 
 #[test]
-fn test_1d_real_uncomplete() {
-  let mut fftw = Fftw::new_real(4);
-  fftw.push(3f64);
-  fftw.push(2f64);
-  fftw.push(-3f64);
+fn test_1d_uncomplete() {
+  let mut fftw = Fftw::new(4);
+  {
+    let inp = fftw.mut_input();
+    inp.push(3f64);
+    inp.push(2f64);
+    inp.push(-3f64);
+  }
   fftw.fft().is_some() && fail!();
 }
 
 #[test]
-fn test_real_iter_few() {
+fn test_iter_few() {
   let inp = [~[], hra!{1}, hra!{1, -5}, hra!{1, -2, -5}, hra!{-2, 46, 2, 1}];
   for inn in inp.iter() {
-    let mut fftw = Fftw::from_slice_real(inn.as_slice());
+    let mut fftw = Fftw::from_slice(inn.as_slice());
     fftw.fft();
-    let it = fftw.iter();
-    for (i,j) in it.zip(fftw.result().iter()) {
+    let it = fftw.iter_symmetry();
+    for (i,j) in it.zip(fftw.output().iter()) {
       assert!(i == *j);
     }
-    for (i,j) in it.skip(fftw.result().len())
-      .zip(fftw.result().rev_iter().skip((fftw.len()+1) % 2)) {
+    for (i,j) in it.skip(fftw.output().len())
+      .zip(fftw.output().rev_iter().skip((fftw.input().len()+1) % 2)) {
       assert!(i == j.conj());
     }
   }
 }
 
 #[test]
-fn test_real_iter_odd() {
+fn test_iter_odd() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1, -3};
-  let mut fftw = Fftw::from_slice_real(inp);
+  let mut fftw = Fftw::from_slice(inp);
   fftw.fft();
-  let it = fftw.iter();
-  for (i,j) in it.zip(fftw.result().iter()) {
+  let it = fftw.iter_symmetry();
+  for (i,j) in it.zip(fftw.output().iter()) {
     assert!(i == *j);
   }
-  for (i,j) in it.skip(fftw.result().len()).zip(fftw.result().rev_iter()) {
+  for (i,j) in it.skip(fftw.output().len()).zip(fftw.output().rev_iter()) {
     assert!(i == j.conj());
   }
 }
 
 #[test]
-fn test_real_iter_even() {
+fn test_iter_even() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1};
-  let mut fftw = Fftw::from_slice_real(inp);
+  let mut fftw = Fftw::from_slice(inp);
   fftw.fft();
-  let it = fftw.iter();
-  for (i,j) in it.zip(fftw.result().iter()) {
+  let it = fftw.iter_symmetry();
+  for (i,j) in it.zip(fftw.output().iter()) {
     assert!(i == *j);
   }
-  for (i,j) in it.skip(fftw.result().len()).zip(fftw.result().rev_iter().skip(1)) {
+  for (i,j) in it.skip(fftw.output().len()).zip(fftw.output().rev_iter().skip(1)) {
     assert!(i == j.conj());
   }
 }
@@ -96,10 +99,10 @@ fn test_real_iter_even() {
 #[test]
 fn test_index() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1};
-  let fftw = Fftw::from_slice_real(inp);
+  let fftw = Fftw::from_slice(inp);
   for i in range(0, 8) {
-    assert!(inp[i] == fftw[i as uint].unwrap());
+    assert!(inp[i] == fftw.input()[i as uint].unwrap());
   }
 
-  fftw[8].is_none() || fail!();
+  fftw.input()[8].is_none() || fail!();
 }
