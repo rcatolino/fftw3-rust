@@ -93,9 +93,9 @@ priv struct CplxSlice<T> {
     println!("{}", Line(fftw.output()));
     ```
 **/
-pub struct Fftw<T> {
-  priv time_dom: FftBuf<T>,
-  priv freq_dom: FftBuf<Cmplx<f64>>,
+pub struct Fftw<In, Out> {
+  priv time_dom: In,
+  priv freq_dom: Out,
   priv plan: fftw_plan,
 }
 
@@ -272,10 +272,10 @@ impl<T: TransformInput> Drop for FftBuf<T> {
   }
 }
 
-impl<T: TransformInput> Fftw<T> {
+impl<T: TransformInput> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
   /// Prepare a new transform for 'capacity' elements.
   /// The transform can only be computed once the input buffer is full.
-  pub fn new(capacity: uint) -> Fftw<T> {
+  pub fn new(capacity: uint) -> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
     let _time: FftBuf<T> = TransformBuf::new(capacity);
     // When the input data is real the output buffer should have a n/2 + 1 capacity,
     // n otherwise. get_transformed_capacity returns the relevant value based on the
@@ -292,7 +292,7 @@ impl<T: TransformInput> Fftw<T> {
   /// Prepare a new transform from the given slice of numbers.
   /// The elements of the slice are copied in an internal buffer allocated by fftw3.
   #[inline]
-  pub fn from_slice(slice: &[T]) -> Fftw<T> {
+  pub fn from_slice(slice: &[T]) -> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
     let mut new = Fftw::new(slice.len());
     new.time_dom.push_slice(slice);
     new
@@ -337,7 +337,7 @@ impl<T: TransformInput> Fftw<T> {
 }
 
 #[unsafe_destructor]
-impl<T: TransformInput> Drop for Fftw<T> {
+impl<T: TransformInput> Drop for Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
   fn drop(&mut self) {
     unsafe {
       let _g = LOCK.lock();
@@ -419,7 +419,7 @@ pub mod iteration {
     }
   }
 
-  impl super::Fftw<f64> {
+  impl super::Fftw<super::FftBuf<f64>, super::FftBuf<Cmplx<f64>>> {
     /// Creates an iterator over *all* the values of a result from a transform over reals.
     /// Since the result of a transform over real values is a Hermitian symmetric space,
     /// only the first half of the symmetry needs to be computed. This iterator will yield
