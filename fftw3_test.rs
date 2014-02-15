@@ -1,3 +1,4 @@
+// Copyright (c) 2014 Raphael Catolino
 #[cfg(test)];
 
 use extra::complex::Cmplx;

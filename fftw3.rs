@@ -1,3 +1,4 @@
+// Copyright (c) 2014 Raphael Catolino
 #[feature(macro_rules)];
 #[crate_id = "fftw3_rust"];
 #[crate_type = "lib"];
