@@ -3,7 +3,7 @@
 
 use extra::complex::Cmplx;
 
-use super::{Fftw};
+use super::{Fftw, TransformInput};
 
 mod fftw3_macros;
 
@@ -102,8 +102,80 @@ fn test_index() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1};
   let fftw = Fftw::from_slice(inp);
   for i in range(0, 8) {
-    assert!(inp[i] == fftw.input()[i as uint].unwrap());
+    assert!(inp[i] == fftw.input()[i as uint]);
   }
 
-  fftw.input()[8].is_none() || fail!();
+  fftw.input().get(8).is_none() || fail!();
+}
+
+fn bench<T: TransformInput>(slice: &[T], domain: &str) {
+  use extra::time::precise_time_ns;
+
+  let (mut t1, mut t2) = (0u64, 0u64);
+  for i in range(0u64, 1000u64) {
+    let start = precise_time_ns();
+    let mut fftw = Fftw::from_slice(slice);
+    let time1 = precise_time_ns();
+    fftw.fft();
+    let time2 = precise_time_ns();
+    t1 = (i*t1 + (time1-start))/(i+1);
+    t2 = (i*t2 + (time2-time1))/(i+1);
+  }
+
+  println!("n={}, {}, time elapsed : {}ms, {}ms",slice.len(), domain,
+           t1 as f64/1000f64, t2 as f64/1000f64);
+}
+
+#[test]
+fn bench_real_10000() {
+  use std::rand::{rng, Rng};
+
+  let mut rng = rng();
+  let mut buff = ::std::vec::with_capacity(10000);
+  for _ in range(0, 10000) {
+    buff.push(rng.gen_range(-100f64, 100f64));
+  }
+
+  bench(buff.as_slice(), "real");
+}
+
+#[test]
+fn bench_real_100() {
+  use std::rand::{rng, Rng};
+
+  let mut rng = rng();
+  let mut buff = ::std::vec::with_capacity(100);
+  for _ in range(0, 100) {
+    buff.push(rng.gen_range(-100f64, 100f64));
+  }
+
+  bench(buff.as_slice(), "real");
+}
+
+#[test]
+fn bench_cmplx_10000() {
+  use std::rand::{rng, Rng};
+
+  let mut rng = rng();
+  let mut buff = ::std::vec::with_capacity(10000);
+  for _ in range(0, 10000) {
+    buff.push(Cmplx::new(rng.gen_range(-100f64, 100f64),
+                         rng.gen_range(-100f64, 100f64)));
+  }
+
+  bench(buff.as_slice(), "complex");
+}
+
+#[test]
+fn bench_cmplx_100() {
+  use std::rand::{rng, Rng};
+
+  let mut rng = rng();
+  let mut buff = ::std::vec::with_capacity(100);
+  for _ in range(0, 100) {
+    buff.push(Cmplx::new(rng.gen_range(-100f64, 100f64),
+                         rng.gen_range(-100f64, 100f64)));
+  }
+
+  bench(buff.as_slice(), "complex");
 }

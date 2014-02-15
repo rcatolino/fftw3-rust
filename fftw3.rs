@@ -112,6 +112,7 @@ trait TransformInput: Pod {
 }
 
 impl TransformInput for f64 {
+  #[inline]
   fn make_buffer(capacity: uint) -> FftBuf<f64> {
     unsafe {
       let _g = LOCK.lock();
@@ -123,10 +124,12 @@ impl TransformInput for f64 {
     }
   }
 
+  #[inline]
   fn transform_size(input: &FftBuf<f64>) -> uint {
     input.capacity/2 + 1
   }
 
+  #[inline]
   fn plan(input: &FftBuf<f64>, output: &FftBuf<Cmplx<f64>>) -> fftw_plan {
     unsafe {
       let _g = LOCK.lock();
@@ -136,6 +139,7 @@ impl TransformInput for f64 {
 }
 
 impl TransformInput for Cmplx<f64> {
+  #[inline]
   fn make_buffer(capacity: uint) -> FftBuf<Cmplx<f64>> {
     unsafe {
       let _g = LOCK.lock();
@@ -147,10 +151,12 @@ impl TransformInput for Cmplx<f64> {
     }
   }
 
+  #[inline]
   fn transform_size(input: &FftBuf<Cmplx<f64>>) -> uint {
     input.capacity
   }
 
+  #[inline]
   fn plan(input: &FftBuf<Cmplx<f64>>, output: &FftBuf<Cmplx<f64>>)-> fftw_plan {
     unsafe {
       let _g = LOCK.lock();
@@ -167,14 +173,17 @@ trait TransformBuf {
 }
 
 impl<T: TransformInput> TransformBuf for FftBuf<T> {
+  #[inline]
   fn new(capacity: uint) -> FftBuf<T> {
     TransformInput::make_buffer(capacity)
   }
 
+  #[inline]
   fn get_transformed_capacity(&self) -> uint {
     TransformInput::transform_size(self)
   }
 
+  #[inline]
   fn make_plan(&self, freq_dom: &FftBuf<Cmplx<f64>>) -> fftw_plan {
     TransformInput::plan(self, freq_dom)
   }
@@ -182,6 +191,7 @@ impl<T: TransformInput> TransformBuf for FftBuf<T> {
 
 impl<T: TransformInput> FftBuf<T> {
   /// Returns a mutable view of this buffer.
+  #[inline]
   pub fn as_mut_slice<'a>(&'a mut self) -> &'a mut[T] {
     unsafe{
       transmute(CplxSlice {
@@ -193,6 +203,7 @@ impl<T: TransformInput> FftBuf<T> {
 
   /// Returns the capacity of this buffer. The capacity is fixed, fft buffer cannot
   /// be resized.
+  #[inline]
   pub fn capacity(&self) -> uint {
     self.capacity
   }
@@ -280,6 +291,7 @@ impl<T: TransformInput> Fftw<T> {
 
   /// Prepare a new transform from the given slice of numbers.
   /// The elements of the slice are copied in an internal buffer allocated by fftw3.
+  #[inline]
   pub fn from_slice(slice: &[T]) -> Fftw<T> {
     let mut new = Fftw::new(slice.len());
     new.time_dom.push_slice(slice);
