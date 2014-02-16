@@ -5,10 +5,11 @@
 #[crate_type = "dylib"];
 
 #[cfg(target_arch = "x86_64")]
-extern mod extra;
-extern mod sync;
+extern crate extra;
+extern crate num;
+extern crate sync;
 
-use extra::complex::Cmplx;
+use num::complex::Cmplx;
 
 use fftw3_bindgen::{FFTW_FORWARD, FFTW_ESTIMATE, fftw_alloc_complex, fftw_free,
                     fftw_plan_dft_1d, fftw_plan_dft_r2c_1d, fftw_destroy_plan,
@@ -84,7 +85,7 @@ priv struct CplxSlice<T> {
     Compute the 1d transform for complex values :
 
     ```rust
-    use extra::complex::Cmplx;
+    use num::complex::Cmplx;
     use fftw3_rust::{Fftw, Line};
 
     let input = [Cmplx::new(1f64, -1f64), Cmplx::new(0f64, 2f64), Cmplx::new(4f64, 12f64)];
@@ -372,7 +373,7 @@ impl<T: TransformInput> Vector<T> for FftBuf<T> {
 }
 
 pub mod iteration {
-  use extra::complex::Cmplx;
+  use num::complex::Cmplx;
   /// Iterator over *all* the values of a result of a transform over real data.
   pub struct HermitianItems<'a> {
     priv ptr: *Cmplx<f64>,

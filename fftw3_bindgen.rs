@@ -2,7 +2,7 @@
 #[allow(dead_code)];
 
 #[cfg(target_arch = "x86_64")]
-use extra::complex::Cmplx;
+use num::complex::Cmplx;
 
 use std::libc::{c_void, c_int, c_uint, c_float,
                 c_long, FILE, size_t, c_double};

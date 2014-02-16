@@ -1,7 +1,8 @@
 // Copyright (c) 2014 Raphael Catolino
 #[cfg(test)];
 
-use extra::complex::Cmplx;
+use extra::time::precise_time_ns;
+use num::complex::Cmplx;
 
 use super::{Fftw, TransformInput};
 
@@ -109,8 +110,6 @@ fn test_index() {
 }
 
 fn bench<T: TransformInput>(slice: &[T], domain: &str) {
-  use extra::time::precise_time_ns;
-
   let (mut t1, mut t2) = (0u64, 0u64);
   for i in range(0u64, 1000u64) {
     let start = precise_time_ns();
@@ -122,8 +121,9 @@ fn bench<T: TransformInput>(slice: &[T], domain: &str) {
     t2 = (i*t2 + (time2-time1))/(i+1);
   }
 
-  println!("n={}, {}, time elapsed : {}ms, {}ms",slice.len(), domain,
-           t1 as f64/1000f64, t2 as f64/1000f64);
+  let _ = ::std::io::stdout().write_line(format!("n={}, {}, time elapsed : {}ms, {}ms",
+                                                 slice.len(), domain, t1 as f64/1000f64,
+                                                 t2 as f64/1000f64));
 }
 
 #[test]
