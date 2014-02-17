@@ -95,8 +95,8 @@ priv struct CplxSlice<T> {
     ```
 **/
 pub struct Fftw<In, Out> {
-  priv time_dom: In,
-  priv freq_dom: Out,
+  priv in_data: In,
+  priv out_data: Out,
   priv plan: fftw_plan,
 }
 
@@ -107,93 +107,130 @@ pub struct FftBuf<T> {
 }
 
 trait TransformInput: Pod {
-  fn make_buffer(capacity: uint) -> FftBuf<Self>;
-  fn transform_size(input: &FftBuf<Self>) -> uint;
-  fn plan(input: &FftBuf<Self>, output: &FftBuf<Cmplx<f64>>)-> fftw_plan;
+  fn fftw_alloc(capacity: uint) -> *mut Self;
+  fn transform_size(input_capacity: uint, _: &[Self]) -> uint;
+  fn plan(N: uint, input: *mut Self, output: *mut Cmplx<f64>)-> fftw_plan;
 }
 
 impl TransformInput for f64 {
   #[inline]
-  fn make_buffer(capacity: uint) -> FftBuf<f64> {
+  fn fftw_alloc(capacity: uint) -> *mut f64 {
     unsafe {
       let _g = LOCK.lock();
-      FftBuf {
-        data: fftw_alloc_real(capacity as size_t),
-        size: 0,
-        capacity: capacity,
-      }
+      fftw_alloc_real(capacity as size_t)
     }
   }
 
   #[inline]
-  fn transform_size(input: &FftBuf<f64>) -> uint {
-    input.capacity/2 + 1
+  fn transform_size(input_capacity: uint, _: &[f64]) -> uint {
+    input_capacity/2 + 1
   }
 
   #[inline]
-  fn plan(input: &FftBuf<f64>, output: &FftBuf<Cmplx<f64>>) -> fftw_plan {
+  fn plan(N: uint, input: *mut f64, output: *mut Cmplx<f64>)-> fftw_plan {
     unsafe {
       let _g = LOCK.lock();
-      fftw_plan_dft_r2c_1d(input.capacity as c_int, input.data, output.data, FFTW_ESTIMATE)
+      fftw_plan_dft_r2c_1d(N as c_int, input, output, FFTW_ESTIMATE)
     }
   }
 }
 
 impl TransformInput for Cmplx<f64> {
   #[inline]
-  fn make_buffer(capacity: uint) -> FftBuf<Cmplx<f64>> {
+  fn fftw_alloc(capacity: uint) -> *mut Cmplx<f64> {
     unsafe {
       let _g = LOCK.lock();
-      FftBuf {
-        data: fftw_alloc_complex(capacity as size_t),
-        size: 0,
-        capacity: capacity,
-      }
+      fftw_alloc_complex(capacity as size_t)
     }
   }
 
   #[inline]
-  fn transform_size(input: &FftBuf<Cmplx<f64>>) -> uint {
-    input.capacity
+  fn transform_size(input_capacity: uint, _: &[Cmplx<f64>]) -> uint {
+    input_capacity
   }
 
   #[inline]
-  fn plan(input: &FftBuf<Cmplx<f64>>, output: &FftBuf<Cmplx<f64>>)-> fftw_plan {
+  fn plan(N: uint, input: *mut Cmplx<f64>, output: *mut Cmplx<f64>)-> fftw_plan {
     unsafe {
       let _g = LOCK.lock();
-      fftw_plan_dft_1d(input.capacity as c_int, input.data, output.data, FFTW_FORWARD,
-                       FFTW_ESTIMATE)
+      fftw_plan_dft_1d(N as c_int, input, output, FFTW_FORWARD, FFTW_ESTIMATE)
     }
   }
 }
 
-trait TransformBuf {
+trait TransformBuf<T>: Vector<T>+Container {
   fn new(capacity: uint) -> Self;
   fn get_transformed_capacity(&self) -> uint;
-  fn make_plan(&self, freq_dom: &FftBuf<Cmplx<f64>>) -> fftw_plan ;
+  fn make_plan(&mut self, out_data: &FftBuf<Cmplx<f64>>) -> fftw_plan;
+  fn ready(&self) -> bool;
+  fn as_mut_slice<'a>(&'a mut self) -> &'a mut [T];
+  fn mark_filled(&mut self);
 }
 
-impl<T: TransformInput> TransformBuf for FftBuf<T> {
+impl<T: TransformInput> TransformBuf<T> for ~[T] {
   #[inline]
-  fn new(capacity: uint) -> FftBuf<T> {
-    TransformInput::make_buffer(capacity)
+  fn new(capacity: uint) -> ~[T] {
+    ::std::vec::with_capacity(capacity)
   }
 
   #[inline]
   fn get_transformed_capacity(&self) -> uint {
-    TransformInput::transform_size(self)
+    TransformInput::transform_size(self.len(), self.as_slice())
   }
 
   #[inline]
-  fn make_plan(&self, freq_dom: &FftBuf<Cmplx<f64>>) -> fftw_plan {
-    TransformInput::plan(self, freq_dom)
+  fn make_plan(&mut self, out_data: &FftBuf<Cmplx<f64>>) -> fftw_plan {
+    TransformInput::plan(self.len(), self.as_mut_ptr(), out_data.data)
+  }
+
+  #[inline]
+  fn ready(&self) -> bool {
+    self.len() > 0
+  }
+
+  #[inline]
+  fn as_mut_slice<'a>(&'a mut self) -> &'a mut[T] {
+    self.as_mut_slice()
+  }
+
+  #[inline]
+  fn mark_filled(&mut self) {
+    let c = self.capacity();
+    unsafe {
+      self.set_len(c);
+    }
   }
 }
+/*
+*/
 
-impl<T: TransformInput> FftBuf<T> {
-  /// Returns a mutable view of this buffer.
+impl<T: TransformInput> TransformBuf<T> for FftBuf<T> {
   #[inline]
-  pub fn as_mut_slice<'a>(&'a mut self) -> &'a mut[T] {
+  fn new(capacity: uint) -> FftBuf<T> {
+    FftBuf {
+      data: TransformInput::fftw_alloc(capacity),
+      size: 0,
+      capacity: capacity,
+    }
+  }
+
+  #[inline]
+  fn get_transformed_capacity(&self) -> uint {
+    TransformInput::transform_size(self.capacity, self.as_slice())
+  }
+
+  #[inline]
+  fn make_plan(&mut self, out_data: &FftBuf<Cmplx<f64>>) -> fftw_plan {
+    TransformInput::plan(self.capacity, self.data, out_data.data)
+  }
+
+  #[inline]
+  fn ready(&self) -> bool {
+    self.capacity == self.size && self.size > 0
+  }
+
+  #[inline]
+  fn as_mut_slice<'a>(&'a mut self) -> &'a mut[T] {
     unsafe{
       transmute(CplxSlice {
         data: &*self.data,
@@ -202,6 +239,13 @@ impl<T: TransformInput> FftBuf<T> {
     }
   }
 
+  #[inline]
+  fn mark_filled(&mut self) {
+    self.size = self.capacity;
+  }
+}
+
+impl<T: TransformInput> FftBuf<T> {
   /// Returns the capacity of this buffer. The capacity is fixed, fft buffer cannot
   /// be resized.
   #[inline]
@@ -274,71 +318,85 @@ impl<T: TransformInput> Drop for FftBuf<T> {
 }
 
 impl<T: TransformInput> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
+  /// Prepare a new transform from the given slice of numbers.
+  /// The elements of the slice are copied in an internal buffer allocated by fftw3.
+  #[inline]
+  pub fn from_slice(slice: &[T]) -> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
+    let mut new: Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> = Fftw::new(slice.len());
+    new.in_data.push_slice(slice);
+    new
+  }
+
+  /// Returns a mutable ref to the input buffer. You can use this to
+  /// add/remove elements from the input.
+  pub fn ref_input<'a>(&'a mut self) -> &'a mut FftBuf<T> {
+    &mut self.in_data
+  }
+}
+
+impl<T: TransformInput, In: TransformBuf<T>> Fftw<In, FftBuf<Cmplx<f64>>> {
   /// Prepare a new transform for 'capacity' elements.
   /// The transform can only be computed once the input buffer is full.
-  pub fn new(capacity: uint) -> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
-    let _time: FftBuf<T> = TransformBuf::new(capacity);
+  pub fn new(capacity: uint) -> Fftw<In, FftBuf<Cmplx<f64>>> {
+    let mut _time: In = TransformBuf::new(capacity);
     // When the input data is real the output buffer should have a n/2 + 1 capacity,
     // n otherwise. get_transformed_capacity returns the relevant value based on the
     // type of T.
     let _freq = TransformBuf::new(_time.get_transformed_capacity());
     let _p = _time.make_plan(&_freq);
     Fftw {
-      time_dom: _time,
-      freq_dom: _freq,
+      in_data: _time,
+      out_data: _freq,
       plan: _p,
     }
   }
+}
 
-  /// Prepare a new transform from the given slice of numbers.
-  /// The elements of the slice are copied in an internal buffer allocated by fftw3.
-  #[inline]
-  pub fn from_slice(slice: &[T]) -> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
-    let mut new = Fftw::new(slice.len());
-    new.time_dom.push_slice(slice);
-    new
-  }
-
+impl<Tin: TransformInput, In: TransformBuf<Tin>,
+     Tout: TransformInput, Out: TransformBuf<Tout>> Fftw<In, Out> {
   /// Perform the actual Fourier transform computation.
   /// If the transform is not filled up yet this does nothing and return None.
   /// Otherwise, this returns an immutable view of the result. (The same you would
   /// get by calling the output() method)
-  pub fn fft<'a>(&'a mut self) -> Option<&'a[Cmplx<f64>]> {
-    if self.time_dom.capacity == self.time_dom.size && self.time_dom.size > 0 {
+  pub fn compute<'a>(&'a mut self) -> Option<&'a[Tout]> {
+    if self.in_data.ready() {
       unsafe{
         fftw_execute(self.plan);
       }
-      self.freq_dom.size = self.freq_dom.capacity;
-      Some(self.freq_dom.as_slice())
+      self.out_data.mark_filled();
+      Some(self.out_data.as_slice())
     } else {
       None
     }
   }
 
+  #[inline]
   /// Returns an immutable view of the input data.
-  pub fn input<'a>(&'a self) -> &'a [T] {
-    self.time_dom.as_slice()
+  pub fn input<'a>(&'a self) -> &'a [Tin] {
+    self.in_data.as_slice()
   }
 
-  /// Returns a mutable ref to the input buffer. You can use this to
-  /// add/remove elements from the input.
-  pub fn mut_input<'a>(&'a mut self) -> &'a mut FftBuf<T> {
-    &mut self.time_dom
+  #[inline]
+  /// Returns an immutable view of the input data.
+  pub fn mut_input<'a>(&'a mut self) -> &'a mut [Tin] {
+    self.in_data.as_mut_slice()
   }
 
+  #[inline]
   /// Returns an immutable view of the output data.
-  pub fn output<'a>(&'a self) -> &'a [Cmplx<f64>] {
-    self.freq_dom.as_slice()
+  pub fn output<'a>(&'a self) -> &'a [Tout] {
+    self.out_data.as_slice()
   }
 
+  #[inline]
   /// Returns a mutable view of the output data.
-  pub fn mut_output<'a>(&'a mut self) -> &'a mut [Cmplx<f64>] {
-    self.freq_dom.as_mut_slice()
+  pub fn mut_output<'a>(&'a mut self) -> &'a mut [Tout] {
+    self.out_data.as_mut_slice()
   }
 }
 
 #[unsafe_destructor]
-impl<T: TransformInput> Drop for Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
+impl<In, Out> Drop for Fftw<In, Out> {
   fn drop(&mut self) {
     unsafe {
       let _g = LOCK.lock();
@@ -428,10 +486,10 @@ pub mod iteration {
     pub fn iter_symmetry<'a>(&'a self) -> HermitianItems<'a> {
       unsafe {
         HermitianItems {
-          ptr: &*self.freq_dom.data,
-          start: &*self.freq_dom.data,
-          end: &*self.freq_dom.data.offset(self.freq_dom.size as int),
-          dir: if self.time_dom.size % 2 == 0 {
+          ptr: &*self.out_data.data,
+          start: &*self.out_data.data,
+          end: &*self.out_data.data.offset(self.out_data.size as int),
+          dir: if self.in_data.size % 2 == 0 {
             2
           } else {
             1

@@ -12,45 +12,45 @@ mod fftw3_macros;
 fn test_1d_cmplx() {
   let inp = ca!{48 -2, 39 + 5, 37+3, 55+0, 22+210};
   let mut fftw = Fftw::from_slice(inp);
-  fftw.fft().unwrap();
+  fftw.compute().unwrap();
 }
 
 #[test]
 fn test_1d_from_slice() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1, -3};
   let mut fftw = Fftw::from_slice(inp);
-  fftw.fft().unwrap();
+  fftw.compute().unwrap();
 }
 
 #[test]
 fn test_1d() {
   let mut fftw = Fftw::new(7);
   for i in range(-2f64, 5f64) {
-    fftw.mut_input().push(i);
+    fftw.ref_input().push(i);
   }
-  fftw.fft().unwrap();
+  fftw.compute().unwrap();
 }
 
 #[test]
 fn test_1d_overflow() {
   let mut fftw = Fftw::new(7);
   for i in range(-2f64, 5f64) {
-    fftw.mut_input().push(i);
+    fftw.ref_input().push(i);
   }
-  fftw.mut_input().push(42f64) && fail!();
-  fftw.fft().unwrap();
+  fftw.ref_input().push(42f64) && fail!();
+  fftw.compute().unwrap();
 }
 
 #[test]
 fn test_1d_uncomplete() {
   let mut fftw = Fftw::new(4);
   {
-    let inp = fftw.mut_input();
+    let inp = fftw.ref_input();
     inp.push(3f64);
     inp.push(2f64);
     inp.push(-3f64);
   }
-  fftw.fft().is_some() && fail!();
+  fftw.compute().is_some() && fail!();
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn test_iter_few() {
   let inp = [~[], hra!{1}, hra!{1, -5}, hra!{1, -2, -5}, hra!{-2, 46, 2, 1}];
   for inn in inp.iter() {
     let mut fftw = Fftw::from_slice(inn.as_slice());
-    fftw.fft();
+    fftw.compute();
     let it = fftw.iter_symmetry();
     for (i,j) in it.zip(fftw.output().iter()) {
       assert!(i == *j);
@@ -74,7 +74,7 @@ fn test_iter_few() {
 fn test_iter_odd() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1, -3};
   let mut fftw = Fftw::from_slice(inp);
-  fftw.fft();
+  fftw.compute();
   let it = fftw.iter_symmetry();
   for (i,j) in it.zip(fftw.output().iter()) {
     assert!(i == *j);
@@ -88,7 +88,7 @@ fn test_iter_odd() {
 fn test_iter_even() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1};
   let mut fftw = Fftw::from_slice(inp);
-  fftw.fft();
+  fftw.compute();
   let it = fftw.iter_symmetry();
   for (i,j) in it.zip(fftw.output().iter()) {
     assert!(i == *j);
@@ -115,7 +115,7 @@ fn bench<T: TransformInput>(slice: &[T], domain: &str) {
     let start = precise_time_ns();
     let mut fftw = Fftw::from_slice(slice);
     let time1 = precise_time_ns();
-    fftw.fft();
+    fftw.compute();
     let time2 = precise_time_ns();
     t1 = (i*t1 + (time1-start))/(i+1);
     t2 = (i*t2 + (time2-time1))/(i+1);
