@@ -16,6 +16,13 @@ macro_rules! ra {
 }
 
 #[macro_export]
+macro_rules! hca {
+  ($($re:tt $sign:tt $im:tt),+) => (
+    ~[$(_c!{$re, $sign $im}),+]
+  )
+}
+
+#[macro_export]
 macro_rules! ca {
   ($($re:tt $sign:tt $im:tt),+) => (
     [$(_c!{$re, $sign $im}),+]

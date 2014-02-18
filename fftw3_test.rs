@@ -10,16 +10,28 @@ mod fftw3_macros;
 
 #[test]
 fn test_1d_cmplx() {
-  let inp = ca!{48 -2, 39 + 5, 37+3, 55+0, 22+210};
+  let inp = ca!{48 -2, 39 +5, 37 +3, 55 +0, 22 +210};
   let mut fftw = Fftw::from_slice(inp);
   fftw.compute().unwrap();
 }
 
 #[test]
-fn test_1d_from_slice() {
+fn test_1d_from_slice_real() {
   let inp = ra!{1, 0, 2, 4, 5, 2, 0, -1, -3};
   let mut fftw = Fftw::from_slice(inp);
   fftw.compute().unwrap();
+}
+
+#[test]
+fn test_1d_from_vec_real() {
+  let inp = hra!{1, 0, 2, 4, 5, 2, 0, -1, -3};
+  Fftw::from_vec(inp).compute().unwrap();
+}
+
+#[test]
+fn test_1d_from_vec_cmplx() {
+  let inp = hca!{1-1, (-1)+0, 2+5, 23-4, 23-5, 1+2, 10+20, (-1)-3, (-3)-1};
+  Fftw::from_vec(inp).compute().unwrap();
 }
 
 #[test]

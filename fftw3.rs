@@ -161,7 +161,7 @@ impl TransformInput for Cmplx<f64> {
 trait TransformBuf<T>: Vector<T>+Container {
   fn new(capacity: uint) -> Self;
   fn get_transformed_capacity(&self) -> uint;
-  fn make_plan(&mut self, out_data: &FftBuf<Cmplx<f64>>) -> fftw_plan;
+  fn make_plan(&mut self, out_data: &mut [Cmplx<f64>]) -> fftw_plan;
   fn ready(&self) -> bool;
   fn as_mut_slice<'a>(&'a mut self) -> &'a mut [T];
   fn mark_filled(&mut self);
@@ -179,8 +179,8 @@ impl<T: TransformInput> TransformBuf<T> for ~[T] {
   }
 
   #[inline]
-  fn make_plan(&mut self, out_data: &FftBuf<Cmplx<f64>>) -> fftw_plan {
-    TransformInput::plan(self.len(), self.as_mut_ptr(), out_data.data)
+  fn make_plan(&mut self, out_data: &mut [Cmplx<f64>]) -> fftw_plan {
+    TransformInput::plan(self.len(), self.as_mut_ptr(), out_data.as_mut_ptr())
   }
 
   #[inline]
@@ -220,8 +220,8 @@ impl<T: TransformInput> TransformBuf<T> for FftBuf<T> {
   }
 
   #[inline]
-  fn make_plan(&mut self, out_data: &FftBuf<Cmplx<f64>>) -> fftw_plan {
-    TransformInput::plan(self.capacity, self.data, out_data.data)
+  fn make_plan(&mut self, out_data: &mut [Cmplx<f64>]) -> fftw_plan {
+    TransformInput::plan(self.capacity, self.data, out_data.as_mut_ptr())
   }
 
   #[inline]
@@ -317,6 +317,21 @@ impl<T: TransformInput> Drop for FftBuf<T> {
   }
 }
 
+impl<T: TransformInput> Fftw<~[T], ~[Cmplx<f64>]> {
+  /// Prepare a new transform using the given buffer. Does not perform any copy of
+  /// the input data. Using a regular vector might prevent the use of simd because
+  /// of alignment constraints.
+  pub fn from_vec(mut vec: ~[T]) -> Fftw<~[T], ~[Cmplx<f64>]> {
+    let mut _out: ~[Cmplx<f64>] = TransformBuf::new(vec.get_transformed_capacity());
+    let _p = vec.make_plan(_out);
+    Fftw {
+      in_data: vec,
+      out_data: _out,
+      plan: _p,
+    }
+  }
+}
+
 impl<T: TransformInput> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
   /// Prepare a new transform from the given slice of numbers.
   /// The elements of the slice are copied in an internal buffer allocated by fftw3.
@@ -329,6 +344,7 @@ impl<T: TransformInput> Fftw<FftBuf<T>, FftBuf<Cmplx<f64>>> {
 
   /// Returns a mutable ref to the input buffer. You can use this to
   /// add/remove elements from the input.
+  #[inline]
   pub fn ref_input<'a>(&'a mut self) -> &'a mut FftBuf<T> {
     &mut self.in_data
   }
@@ -338,15 +354,15 @@ impl<T: TransformInput, In: TransformBuf<T>> Fftw<In, FftBuf<Cmplx<f64>>> {
   /// Prepare a new transform for 'capacity' elements.
   /// The transform can only be computed once the input buffer is full.
   pub fn new(capacity: uint) -> Fftw<In, FftBuf<Cmplx<f64>>> {
-    let mut _time: In = TransformBuf::new(capacity);
+    let mut _in: In = TransformBuf::new(capacity);
     // When the input data is real the output buffer should have a n/2 + 1 capacity,
     // n otherwise. get_transformed_capacity returns the relevant value based on the
     // type of T.
-    let _freq = TransformBuf::new(_time.get_transformed_capacity());
-    let _p = _time.make_plan(&_freq);
+    let mut _out: FftBuf<Cmplx<f64>> = TransformBuf::new(_in.get_transformed_capacity());
+    let _p = _in.make_plan(_out.as_mut_slice());
     Fftw {
-      in_data: _time,
-      out_data: _freq,
+      in_data: _in,
+      out_data: _out,
       plan: _p,
     }
   }
