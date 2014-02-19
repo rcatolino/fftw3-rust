@@ -4,7 +4,7 @@
 use extra::time::precise_time_ns;
 use num::complex::Cmplx;
 
-use super::{Fftw, TransformInput};
+use super::{Fftw, TransformData};
 
 mod fftw3_macros;
 
@@ -32,6 +32,20 @@ fn test_1d_from_vec_real() {
 fn test_1d_from_vec_cmplx() {
   let inp = hca!{1-1, (-1)+0, 2+5, 23-4, 23-5, 1+2, 10+20, (-1)-3, (-3)-1};
   Fftw::from_vec(inp).compute().unwrap();
+}
+
+#[test]
+fn test_1d_cmplx_inv() {
+  let inp = ca!{48 -2, 39 +5, 37 +3, 55 +0, 22 +210};
+  let mut fftw = Fftw::from_slice_c2r(inp);
+  fftw.compute().unwrap();
+}
+
+#[test]
+fn test_1d_from_slice_real_inv() {
+  let inp = ca!{48 -2, 39 +5, 37 +3, 55 +0, 22 +210};
+  let mut fftw = Fftw::from_slice_inv(inp);
+  fftw.compute().unwrap();
 }
 
 #[test]
@@ -121,7 +135,7 @@ fn test_index() {
   fftw.input().get(8).is_none() || fail!();
 }
 
-fn bench<T: TransformInput>(slice: &[T], domain: &str) {
+fn bench<T: TransformData>(slice: &[T], domain: &str) {
   let (mut t1, mut t2) = (0u64, 0u64);
   for i in range(0u64, 1000u64) {
     let start = precise_time_ns();
